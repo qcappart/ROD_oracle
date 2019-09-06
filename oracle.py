@@ -10,15 +10,14 @@ from tqdm import tqdm
 from concorde.tsp import TSPSolver
 import torch
 from torch.autograd import Variable
-from numba import jit
 import matplotlib.pyplot as plt
 
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 
 from config import *
-from utils.google_tsp_reader import GoogleTSPReader, InferenceGoogleTSPReader
-from utils.load_LKH_tours import load_LKH_predictions, blur_preds, blur_preds_2, blur_preds_3
+from utils.google_tsp_reader import InferenceGoogleTSPReader
+from utils.load_LKH_tours import load_LKH_predictions
 
 parser = argparse.ArgumentParser(description='gcn_tsp_parser')
 parser.add_argument('-c','--config', type=str, default="configs/default.json")
@@ -33,16 +32,9 @@ config_path = args.config
 config = get_config(config_path)
 print("Loaded {}:\n{}".format(config_path, config))
 
-if torch.cuda.is_available():
-    print("CUDA available, using GPU ID {}".format(config.gpu_id))
-    dtypeFloat = torch.cuda.FloatTensor
-    dtypeLong = torch.cuda.LongTensor
-    torch.cuda.manual_seed(1)
-else:
-    print("CUDA not available")
-    dtypeFloat = torch.FloatTensor
-    dtypeLong = torch.LongTensor
-    torch.manual_seed(1)
+dtypeFloat = torch.FloatTensor
+dtypeLong = torch.LongTensor
+torch.manual_seed(1)
 
 def compute_mean_tour_length(bs_nodes, x_edges_values):
     total_length = 0
@@ -116,7 +108,6 @@ def display_current_situation(x_edges_array, node_coords, visited_vertices, opt_
     begin_opt = True
     opt_tour_idx = 0
     while (begin_vertex != opt_current_vertex or begin_opt):
-    #for  in range(num_nodes-len(visited_vertices)+1):
         begin_opt = False
         next_opt_vertex = int(opt_tour[0, opt_current_vertex, :].argmax())
         opt_tour_vertices.append(next_opt_vertex)
@@ -138,19 +129,16 @@ def display_current_situation(x_edges_array, node_coords, visited_vertices, opt_
     plt.clf()
 
 
-def compute_bs_nodes(y_preds, opt_tour, x_edges_array, recalibrate, num_nodes, batch_num, oracle_precision, best_arcs_percentage):
-    y_preds_array = y_preds.cpu().numpy()
+def compute_bs_nodes(opt_tour, x_edges_array, recalibrate, num_nodes, batch_num, oracle_precision, best_arcs_percentage):
     # opt_tour_array = opt_tour.cpu().numpy()
     graph_bs_nodes = np.zeros(num_nodes)
     chose_optimal_arc = True
     current_vertex = 0
     visited_vertices_nb = 1
-    y_preds_array[0, :, 0] = -1
     visited_vertices = [0]
     nodes_list = range(num_nodes)
     for visited_vertices_nb in range(1, num_nodes):
     #while (visited_vertices_nb<num_nodes):
-        y_preds_line = y_preds_array[0, current_vertex, :]
         # print(opt_tour.cpu().numpy()[0, current_vertex, :], opt_tour[0, :, current_vertex])
         
         problem = False
@@ -200,10 +188,6 @@ def compute_bs_nodes(y_preds, opt_tour, x_edges_array, recalibrate, num_nodes, b
             new_vertex = np.random.choice(range(num_nodes), p=distances)
             # print("non", distances)
         # print(new_vertex)
-        ### OLD VERSION ###
-        # max_proba_indices = np.nonzero(np.ravel(y_preds_line==y_preds_line.max()))[0]
-        # new_vertex = np.random.choice(max_proba_indices)
-        ###################
 
         visited_vertices.append(new_vertex)
         # print(visited_vertices)
@@ -240,27 +224,11 @@ def compute_bs_nodes(y_preds, opt_tour, x_edges_array, recalibrate, num_nodes, b
             #print("data ", partial_tour, partial_nodes_list, visited_vertices)
             #print("ortools final", partial_array[partial_tour])
 
-            # print(blur_preds_2(y_preds[:, :, partial_array][:, partial_array, :], \
-            #                  x_edges_values[:, :, partial_array][:, partial_array, :], \
-            #                  oracle_precision, best_arcs_nb))
-
             # Mettre a jour le opt_tour
             opt_tour = torch.zeros(opt_tour.shape)
             for tour_idx in range(len(partial_tour)-1):
                 opt_tour[0, partial_array[partial_tour][tour_idx], partial_array[partial_tour][tour_idx+1]] = 1
             # the partial tour loops back to 0, so no need to add the closing link
-            # print("before", y_preds[:, partial_array.reshape(-1,1), partial_array])
-            best_arcs_nb = int(math.ceil(best_arcs_percentage*(num_nodes-visited_vertices_nb)))
-            new_sliced_preds = \
-                blur_preds_3(opt_tour[:, partial_array.reshape(-1,1), partial_array], \
-                             x_edges_values[:, partial_array.reshape(-1,1), partial_array], \
-                             oracle_precision, best_arcs_nb)
-            #print(new_sliced_preds)
-            y_preds[:, partial_array.reshape(-1,1), partial_array] = new_sliced_preds
-            y_preds[0, :, 0] = -1
-            #print("after", y_preds[:, partial_array.reshape(-1,1), partial_array])
-
-            y_preds_array = y_preds.cpu().numpy()
         elif chose_optimal_arc:
             # print("CORRECTECTIO", visited_vertices, current_vertex, new_vertex, visited_vertices[-2])
             # print("opt_tour", opt_tour)
@@ -278,10 +246,8 @@ def compute_bs_nodes(y_preds, opt_tour, x_edges_array, recalibrate, num_nodes, b
                 opt_tour[0, new_vertex, visited_vertices[0]] = 1
 
         # Making the current vertex unaccessible for the next iterations
-        y_preds_array[0, :, new_vertex] = -1
         graph_bs_nodes[visited_vertices_nb] = new_vertex
         current_vertex = new_vertex
-        # print("lol", y_preds_array)
         if args.display:
             display_current_situation(x_edges_array, batch.nodes_coord, visited_vertices, opt_tour, num_nodes)
 
@@ -292,16 +258,13 @@ def compute_bs_nodes(y_preds, opt_tour, x_edges_array, recalibrate, num_nodes, b
 num_nodes = config.num_nodes
 num_neighbors = config.num_neighbors
 batches_per_epoch = config.batches_per_epoch
-beam_size = config.beam_size
-val_filepath = config.val_filepath
-test_filepath = config.test_filepath
 
 batch_size = 1
 filepath = config.test_filepath
 
 ########### Parameters ###########
 # precision_values = np.arange(0.5, 1.001, 0.01)
-precision_values = np.arange(0.86, 0.87, 0.001)
+precision_values = np.arange(0.86, 0.87, 0.01)
 # precision_values = np.arange(0.94, 1.00001, 0.001)
 best_arcs_percentage = 0.1
 ##################################
@@ -333,14 +296,11 @@ for oracle_precision in precision_values:
         for node_idx in range(num_nodes):
             x_edges_values[0, node_idx, node_idx] = 10
 
-        y_preds = total_y_preds[batch_num:batch_num+1, :, :]
-        best_arcs_nb = int(best_arcs_percentage*num_nodes)
-        y_preds = blur_preds_3(y_preds, x_edges_values, oracle_precision, best_arcs_nb)
         opt_tour = total_y_preds[batch_num:batch_num+1, :, :]
         x_edges_array = x_edges_values.cpu().numpy()
 
         # Computing a tour based on the oracle
-        bs_nodes[batch_num, :] = compute_bs_nodes(y_preds, opt_tour, x_edges_array, args.recalibrate, num_nodes, batch_num, oracle_precision, best_arcs_percentage)
+        bs_nodes[batch_num, :] = compute_bs_nodes(opt_tour, x_edges_array, args.recalibrate, num_nodes, batch_num, oracle_precision, best_arcs_percentage)
 
         tour_length = compute_mean_tour_length(bs_nodes[batch_num, :].reshape((1, -1)), x_edges_values.cpu().numpy())
         
