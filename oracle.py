@@ -19,13 +19,11 @@ from ortools.constraint_solver import pywrapcp
 from config import *
 from utils.google_tsp_reader import GoogleTSPReader, InferenceGoogleTSPReader
 from utils.load_LKH_tours import load_LKH_predictions, blur_preds, blur_preds_2, blur_preds_3
-from utils.two_opt_solver import two_opt_enhance
 
 parser = argparse.ArgumentParser(description='gcn_tsp_parser')
 parser.add_argument('-c','--config', type=str, default="configs/default.json")
 parser.add_argument('--tours_file', type=str, required=True)
 parser.add_argument('--recalibrate', action='store_true')
-parser.add_argument('--two_opt', action='store_true')
 parser.add_argument('--display', action='store_true')
 
 args = parser.parse_args()
@@ -319,8 +317,6 @@ for oracle_precision in precision_values:
     total_y_preds = load_LKH_predictions(args.tours_file)
     bs_nodes = np.zeros((batches_per_epoch, num_nodes), dtype=np.int32)
     total_length = 0
-    if args.two_opt:
-        two_opt_total_length = 0
 
     for batch_num in tqdm(range(batches_per_epoch)):
         # Generate a batch of TSPs
@@ -345,16 +341,10 @@ for oracle_precision in precision_values:
 
         # Computing a tour based on the oracle
         bs_nodes[batch_num, :] = compute_bs_nodes(y_preds, opt_tour, x_edges_array, args.recalibrate, num_nodes, batch_num, oracle_precision, best_arcs_percentage)
-        if args.two_opt:
-            initial_nodes = Variable(torch.Tensor(bs_nodes[batch_num, :].reshape((1, -1)))).int()
-            two_opt_nodes = two_opt_enhance(initial_nodes, x_edges_values)
-            two_opt_tour_length = compute_mean_tour_length(two_opt_nodes.reshape((1, -1)), x_edges_values.cpu().numpy())
 
         tour_length = compute_mean_tour_length(bs_nodes[batch_num, :].reshape((1, -1)), x_edges_values.cpu().numpy())
         
         total_length += tour_length
-        if args.two_opt:
-            two_opt_total_length += two_opt_tour_length
 
         # print("New instance")
         # if batch_num>10:
@@ -362,5 +352,3 @@ for oracle_precision in precision_values:
 
     #print(bs_nodes)
     print("Mean tour length : " + str(total_length/batches_per_epoch))
-    if args.two_opt:
-        print("2OPT tour length : " + str(two_opt_total_length/batches_per_epoch))
