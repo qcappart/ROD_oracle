@@ -15,6 +15,8 @@ import matplotlib.pyplot as plt
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 
+from dataset import DataReader
+
 from config import *
 from utils.google_tsp_reader import InferenceGoogleTSPReader
 from utils.load_LKH_tours import load_LKH_predictions
@@ -36,19 +38,19 @@ dtypeFloat = torch.FloatTensor
 dtypeLong = torch.LongTensor
 torch.manual_seed(1)
 
-def compute_mean_tour_length(bs_nodes, x_edges_values):
+def compute_mean_tour_length(num_graphs, bs_nodes, x_edges_values):
     total_length = 0
-    graph_nb, nodes_nb, _ = x_edges_values.shape
-    for graph_idx in range(graph_nb):
-        # print(bs_nodes)
-        for node_idx in range(nodes_nb-1):
-            total_length += x_edges_values[graph_idx, \
-                                           bs_nodes[graph_idx, node_idx], \
-                                           bs_nodes[graph_idx, node_idx+1]]
-        total_length += x_edges_values[graph_idx, \
-                                       bs_nodes[graph_idx, 0], \
-                                       bs_nodes[graph_idx, nodes_nb-1]]
-    return total_length/graph_nb
+    nodes_nb, _ = x_edges_values.shape
+    # print(bs_nodes.shape, x_edges_values.shape, nodes_nb)
+    # for graph_idx in range(num_graphs):
+    for node_idx in range(nodes_nb-1):
+        # print("oui", graph_idx, node_idx)
+        # print(bs_nodes[graph_idx, node_idx], bs_nodes[graph_idx, node_idx+1])
+        total_length += x_edges_values[bs_nodes[node_idx], \
+                                       bs_nodes[node_idx+1]]
+    total_length += x_edges_values[bs_nodes[0], \
+                                   bs_nodes[nodes_nb-1]]
+    return total_length
 
 def create_data(distance_array, inflating_param):
     data = {}
@@ -97,9 +99,9 @@ def ortools_solve(data):
     return np.array(partial_tour)
 
 
-def display_current_situation(x_edges_array, node_coords, visited_vertices, opt_tour, num_nodes):
-    plt.plot(node_coords[0][:, 0], node_coords[0][:, 1], "bo")
-    plt.plot(node_coords[0][visited_vertices, 0], node_coords[0][visited_vertices, 1], "b-")
+def display_current_situation(cost_array, node_coords, visited_vertices, opt_tour, num_nodes):
+    plt.plot(node_coords[:, 0], node_coords[:, 1], "bo")
+    plt.plot(node_coords[visited_vertices, 0], node_coords[visited_vertices, 1], "b-")
     opt_current_vertex = visited_vertices[0]
     if (int(opt_tour[0, opt_current_vertex, :].argmax())==visited_vertices[-1]):
         opt_current_vertex = visited_vertices[-1]
@@ -119,17 +121,17 @@ def display_current_situation(x_edges_array, node_coords, visited_vertices, opt_
 
     current_length = 0
     for idx in range(len(opt_tour_vertices)-1):
-        current_length += x_edges_array[0, opt_tour_vertices[idx], opt_tour_vertices[idx+1]]
+        current_length += cost_array[opt_tour_vertices[idx], opt_tour_vertices[idx+1]]
     for idx in range(len(visited_vertices)-1):
-        current_length += x_edges_array[0, visited_vertices[idx], visited_vertices[idx+1]]
+        current_length += cost_array[visited_vertices[idx], visited_vertices[idx+1]]
 
-    plt.plot(node_coords[0][opt_tour_vertices, 0], node_coords[0][opt_tour_vertices, 1], "r-")
+    plt.plot(node_coords[opt_tour_vertices, 0], node_coords[opt_tour_vertices, 1], "r-")
     plt.title(current_length)
     plt.pause(0.5)
     plt.clf()
 
 
-def compute_bs_nodes(opt_tour, x_edges_array, recalibrate, num_nodes, batch_num, oracle_precision, best_arcs_percentage):
+def compute_bs_nodes(opt_tour, cost_array, recalibrate, num_nodes, batch_num, oracle_precision, coords_array):
     # opt_tour_array = opt_tour.cpu().numpy()
     graph_bs_nodes = np.zeros(num_nodes)
     chose_optimal_arc = True
@@ -162,7 +164,7 @@ def compute_bs_nodes(opt_tour, x_edges_array, recalibrate, num_nodes, batch_num,
             # print("oui")
         else:
             ################## INVERSE PROBABILITY ##################
-            distances = 1.0/x_edges_array[0, current_vertex, :]
+            distances = 1.0/cost_array[current_vertex, :]
             for visited_idx in visited_vertices:
                 distances[visited_idx] = 0
             distances = distances/distances.sum()
@@ -170,7 +172,7 @@ def compute_bs_nodes(opt_tour, x_edges_array, recalibrate, num_nodes, batch_num,
             #########################################################
 
             ################## SOFTMAX PROBABILITY ##################
-            # distances = np.exp(-x_edges_array[0, current_vertex, :])
+            # distances = np.exp(-cost_array[current_vertex, :])
             # for visited_idx in visited_vertices:
             #     distances[visited_idx] = 0
             # distances = distances/distances.sum()
@@ -178,7 +180,7 @@ def compute_bs_nodes(opt_tour, x_edges_array, recalibrate, num_nodes, batch_num,
             #########################################################
 
             ################## LOG PROBABILITY ##################
-            # distances = np.log(x_edges_array[0, current_vertex, :]/np.sqrt(2))
+            # distances = np.log(cost_array[current_vertex, :]/np.sqrt(2))
             # for visited_idx in visited_vertices:
             #     distances[visited_idx] = 0
             # distances = distances/distances.sum()
@@ -206,9 +208,9 @@ def compute_bs_nodes(opt_tour, x_edges_array, recalibrate, num_nodes, batch_num,
                 print(invert_partial_list)
             # print(partial_nodes_list, visited_vertices[-1])
             
-            tmp_cost_array = np.delete(np.delete(x_edges_array, visited_vertices[1:-1], axis=1), visited_vertices[1:-1], axis=2)
-            partial_cost_array = np.zeros((tmp_cost_array.shape[1]+1, tmp_cost_array.shape[2]+1))
-            partial_cost_array[:-1, :-1] = tmp_cost_array[0, :, :]
+            tmp_cost_array = np.delete(np.delete(cost_array, visited_vertices[1:-1], axis=0), visited_vertices[1:-1], axis=1)
+            partial_cost_array = np.zeros((tmp_cost_array.shape[0]+1, tmp_cost_array.shape[1]+1))
+            partial_cost_array[:-1, :-1] = tmp_cost_array[:, :]
             upper_bound = num_nodes*tmp_cost_array.max()
             partial_cost_array[-1, 1:] = upper_bound
             partial_cost_array[1:, -1] = upper_bound
@@ -249,7 +251,7 @@ def compute_bs_nodes(opt_tour, x_edges_array, recalibrate, num_nodes, batch_num,
         graph_bs_nodes[visited_vertices_nb] = new_vertex
         current_vertex = new_vertex
         if args.display:
-            display_current_situation(x_edges_array, batch.nodes_coord, visited_vertices, opt_tour, num_nodes)
+            display_current_situation(cost_array, coords_array, visited_vertices, opt_tour, num_nodes)
 
     if args.display:
         plt.show()
@@ -266,44 +268,46 @@ filepath = config.test_filepath
 # precision_values = np.arange(0.5, 1.001, 0.01)
 precision_values = np.arange(0.86, 0.87, 0.01)
 # precision_values = np.arange(0.94, 1.00001, 0.001)
-best_arcs_percentage = 0.1
 ##################################
 
 for oracle_precision in precision_values:
     print("Exploring with precision : " + str(oracle_precision))
 
-    # Load data and apply blur
-    dataset = InferenceGoogleTSPReader(num_nodes, num_neighbors, batch_size=batch_size, filepath=filepath)
-    batches_per_epoch = dataset.max_iter
-    dataset = iter(dataset)
+    test_dataset = DataReader(num_nodes, filepath, args.tours_file)
+    batches_per_epoch = test_dataset.num_graphs
 
-    total_y_preds = load_LKH_predictions(args.tours_file)
+    # Load data and apply blur
+    # dataset = InferenceGoogleTSPReader(num_nodes, num_neighbors, batch_size=batch_size, filepath=filepath)
+    # batches_per_epoch = dataset.max_iter
+    # dataset = iter(dataset)
+
+    # total_y_preds = load_LKH_predictions(args.tours_file)
     bs_nodes = np.zeros((batches_per_epoch, num_nodes), dtype=np.int32)
     total_length = 0
 
     for batch_num in tqdm(range(batches_per_epoch)):
         # Generate a batch of TSPs
-        try:
-            batch = next(dataset)
-        except StopIteration:
-            break
+        # try:
+        #     batch = next(dataset)
+        # except StopIteration:
+        #     break
+        cost_array, total_y_preds, coords_array = test_dataset.get_next_graph()
 
-        x_edges = Variable(torch.LongTensor(batch.edges).type(dtypeLong), \
-                        requires_grad=False)
-        x_edges_values = Variable(torch.FloatTensor(batch.edges_values).type(dtypeFloat), \
-                                requires_grad=False)
+        # x_edges_values = Variable(torch.FloatTensor(batch.edges_values).type(dtypeFloat), \
+        #                         requires_grad=False)
         # Changing diagonal values to prevent staying at the same vertex
         for node_idx in range(num_nodes):
-            x_edges_values[0, node_idx, node_idx] = 10
+            cost_array[node_idx, node_idx] = 10
+            # x_edges_values[0, node_idx, node_idx] = 10
 
         opt_tour = total_y_preds[batch_num:batch_num+1, :, :]
-        x_edges_array = x_edges_values.cpu().numpy()
+        # x_edges_array = x_edges_values.cpu().numpy()
 
         # Computing a tour based on the oracle
-        bs_nodes[batch_num, :] = compute_bs_nodes(opt_tour, x_edges_array, args.recalibrate, num_nodes, batch_num, oracle_precision, best_arcs_percentage)
+        bs_nodes[batch_num, :] = compute_bs_nodes(opt_tour, cost_array, args.recalibrate, num_nodes, batch_num, oracle_precision, coords_array)
 
-        tour_length = compute_mean_tour_length(bs_nodes[batch_num, :].reshape((1, -1)), x_edges_values.cpu().numpy())
-        
+        tour_length = compute_mean_tour_length(test_dataset.num_graphs, bs_nodes[batch_num, :], cost_array)
+
         total_length += tour_length
 
         # print("New instance")
