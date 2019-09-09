@@ -91,11 +91,6 @@ def ortools_solve(data):
     dummy_vertex_idx = data['distance_matrix'].shape[0]-1
     partial_tour.remove(dummy_vertex_idx)
     
-    # lol_val = 0
-    # for idx in range(len(partial_tour)-1):
-    #     lol_val += data['distance_matrix'][partial_tour[idx], partial_tour[idx+1]]
-    # print("ET WALAAAAAAAa : ", lol_val/1e5)
-
     return np.array(partial_tour)
 
 
@@ -103,7 +98,7 @@ def display_current_situation(cost_array, node_coords, visited_vertices, opt_tou
     plt.plot(node_coords[:, 0], node_coords[:, 1], "bo")
     plt.plot(node_coords[visited_vertices, 0], node_coords[visited_vertices, 1], "b-")
     opt_current_vertex = visited_vertices[0]
-    if (int(opt_tour[0, opt_current_vertex, :].argmax())==visited_vertices[-1]):
+    if (int(opt_tour[opt_current_vertex, :].argmax())==visited_vertices[-1]):
         opt_current_vertex = visited_vertices[-1]
     opt_tour_vertices = [opt_current_vertex]
     begin_vertex = opt_current_vertex
@@ -111,7 +106,7 @@ def display_current_situation(cost_array, node_coords, visited_vertices, opt_tou
     opt_tour_idx = 0
     while (begin_vertex != opt_current_vertex or begin_opt):
         begin_opt = False
-        next_opt_vertex = int(opt_tour[0, opt_current_vertex, :].argmax())
+        next_opt_vertex = int(opt_tour[opt_current_vertex, :].argmax())
         opt_tour_vertices.append(next_opt_vertex)
         opt_current_vertex = next_opt_vertex
         opt_tour_idx += 1
@@ -132,7 +127,6 @@ def display_current_situation(cost_array, node_coords, visited_vertices, opt_tou
 
 
 def compute_bs_nodes(opt_tour, cost_array, recalibrate, num_nodes, batch_num, oracle_precision, coords_array):
-    # opt_tour_array = opt_tour.cpu().numpy()
     graph_bs_nodes = np.zeros(num_nodes)
     chose_optimal_arc = True
     current_vertex = 0
@@ -140,15 +134,12 @@ def compute_bs_nodes(opt_tour, cost_array, recalibrate, num_nodes, batch_num, or
     visited_vertices = [0]
     nodes_list = range(num_nodes)
     for visited_vertices_nb in range(1, num_nodes):
-    #while (visited_vertices_nb<num_nodes):
-        # print(opt_tour.cpu().numpy()[0, current_vertex, :], opt_tour[0, :, current_vertex])
-        
         problem = False
 
         if (np.random.rand()<=oracle_precision):
             # Looking at the vertices before and after and choosing the one not visited yet
-            new_vertex_1 = np.argmax(opt_tour.cpu().numpy()[0, current_vertex, :])
-            new_vertex_2 = np.argmax(opt_tour.cpu().numpy()[0, :, current_vertex])
+            new_vertex_1 = np.argmax(opt_tour.cpu().numpy()[current_vertex, :])
+            new_vertex_2 = np.argmax(opt_tour.cpu().numpy()[:, current_vertex])
             # print(new_vertex_1, new_vertex_2)
             if new_vertex_1 not in visited_vertices:
                 new_vertex = new_vertex_1
@@ -158,8 +149,8 @@ def compute_bs_nodes(opt_tour, cost_array, recalibrate, num_nodes, batch_num, or
                 print("There's an issue here")
                 print(visited_vertices_nb, current_vertex, new_vertex_1, new_vertex_2)
                 print(opt_tour)
-                print(opt_tour.cpu().numpy()[0, current_vertex, :])
-                print(opt_tour.cpu().numpy()[0, :, current_vertex])
+                print(opt_tour[current_vertex, :])
+                print(opt_tour[:, current_vertex])
                 problem = True
             # print("oui")
         else:
@@ -194,7 +185,7 @@ def compute_bs_nodes(opt_tour, cost_array, recalibrate, num_nodes, batch_num, or
         visited_vertices.append(new_vertex)
         # print(visited_vertices)
         # print(current_vertex, max_proba_indices, new_vertex)
-        chose_optimal_arc = int(opt_tour[0, current_vertex, new_vertex])==1 or int(opt_tour[0, new_vertex, current_vertex])==1
+        chose_optimal_arc = int(opt_tour[current_vertex, new_vertex])==1 or int(opt_tour[new_vertex, current_vertex])==1
 
         # print(visited_vertices_nb, current_vertex, new_vertex, chose_optimal_arc, visited_vertices)
 
@@ -229,23 +220,23 @@ def compute_bs_nodes(opt_tour, cost_array, recalibrate, num_nodes, batch_num, or
             # Mettre a jour le opt_tour
             opt_tour = torch.zeros(opt_tour.shape)
             for tour_idx in range(len(partial_tour)-1):
-                opt_tour[0, partial_array[partial_tour][tour_idx], partial_array[partial_tour][tour_idx+1]] = 1
+                opt_tour[partial_array[partial_tour][tour_idx], partial_array[partial_tour][tour_idx+1]] = 1
             # the partial tour loops back to 0, so no need to add the closing link
         elif chose_optimal_arc:
             # print("CORRECTECTIO", visited_vertices, current_vertex, new_vertex, visited_vertices[-2])
             # print("opt_tour", opt_tour)
-            opt_tour[0, visited_vertices[0], current_vertex] = 0
-            opt_tour[0, current_vertex, visited_vertices[0]] = 0
+            opt_tour[visited_vertices[0], current_vertex] = 0
+            opt_tour[current_vertex, visited_vertices[0]] = 0
             going_forward = True
-            if opt_tour[0, current_vertex, new_vertex] == 0:
+            if opt_tour[current_vertex, new_vertex] == 0:
                 going_forward = False
-                opt_tour[0, new_vertex, current_vertex] = 0
+                opt_tour[new_vertex, current_vertex] = 0
             else:
-                opt_tour[0, current_vertex, new_vertex] = 0
+                opt_tour[current_vertex, new_vertex] = 0
             if going_forward:
-                opt_tour[0, visited_vertices[0], new_vertex] = 1
+                opt_tour[visited_vertices[0], new_vertex] = 1
             else:
-                opt_tour[0, new_vertex, visited_vertices[0]] = 1
+                opt_tour[new_vertex, visited_vertices[0]] = 1
 
         # Making the current vertex unaccessible for the next iterations
         graph_bs_nodes[visited_vertices_nb] = new_vertex
@@ -300,7 +291,7 @@ for oracle_precision in precision_values:
             cost_array[node_idx, node_idx] = 10
             # x_edges_values[0, node_idx, node_idx] = 10
 
-        opt_tour = total_y_preds[batch_num:batch_num+1, :, :]
+        opt_tour = total_y_preds[batch_num, :, :]
         # x_edges_array = x_edges_values.cpu().numpy()
 
         # Computing a tour based on the oracle
@@ -309,10 +300,6 @@ for oracle_precision in precision_values:
         tour_length = compute_mean_tour_length(test_dataset.num_graphs, bs_nodes[batch_num, :], cost_array)
 
         total_length += tour_length
-
-        # print("New instance")
-        # if batch_num>10:
-        #     break
 
     #print(bs_nodes)
     print("Mean tour length : " + str(total_length/batches_per_epoch))
