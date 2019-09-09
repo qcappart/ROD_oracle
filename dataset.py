@@ -1,31 +1,5 @@
 import numpy as np
 from scipy.spatial.distance import pdist, squareform
-import torch
-
-def load_LKH_predictions(tour_filename):
-    with open(tour_filename, "r") as tour_f:
-        tour_lines = tour_f.readlines()
-
-    #edges_nb = tour_lines[0].count(" ")
-    #print(tour_lines[0].replace(" \n", "").replace("\n", "").split(" "))
-    edges_nb = max([int(vertex_str) for vertex_str in tour_lines[0].replace(" \n", "").replace("\n", "").split(" ")])
-    graphs_nb = len(tour_lines)
-
-    # Numpy array keeping in the edges used for tours in a matrix
-    tour_array = np.zeros((graphs_nb, edges_nb, edges_nb))
-
-    for graph_idx in range(len(tour_lines)):
-        line = tour_lines[graph_idx].replace(" \n", "").replace("\n", "") + " 1"
-        #print(line, line.split(" "))
-        line = [int(vertex_str)-1 for vertex_str in line.split(" ")]
-        for vertex_idx in range(len(line)-1):
-            tour_array[graph_idx, line[vertex_idx], line[vertex_idx+1]] = 1
-            #tour_array[graph_idx, line[vertex_idx+1], line[vertex_idx]] = 1
-
-    # Creating the tensor and the variable
-    tour_tensor = torch.Tensor(tour_array)
-    y_preds = torch.autograd.Variable(tour_tensor)
-    return y_preds
 
 class DataReader():
     """Class that reads and treats TSP data
@@ -56,28 +30,14 @@ class DataReader():
         cost_array = squareform(pdist(coords_array, 'euclidean'))
 
         # Retrieve the optimal solution
-        # Numpy array keeping in the edges used for tours in a matrix
-        tour_array = np.zeros((self.num_graphs, self.num_nodes, self.num_nodes))
         forward_opt_tour = {}
         backward_opt_tour = {}
 
-        for graph_idx in range(len(self.solution_data)):
-            line = self.solution_data[graph_idx].replace(" \n", "").replace("\n", "") + " 1"
-            line = [int(vertex_str)-1 for vertex_str in line.split(" ")]
-            for vertex_idx in range(len(line)-1):
-                tour_array[graph_idx, line[vertex_idx], line[vertex_idx+1]] = 1
-
-            if self.current_graph_idx==graph_idx:
-                for vertex_idx in range(len(line)-1):
-                    forward_opt_tour[line[vertex_idx]] = line[vertex_idx+1]
-                    backward_opt_tour[line[vertex_idx+1]] = line[vertex_idx]
-                # print(line)
-                # print("for", forward_opt_tour)
-                # print("back", backward_opt_tour)
-
-        # Creating the tensor and the variable
-        tour_tensor = torch.Tensor(tour_array)
-        y_preds = torch.autograd.Variable(tour_tensor)
+        line = self.solution_data[self.current_graph_idx].replace(" \n", "").replace("\n", "") + " 1"
+        line = [int(vertex_str)-1 for vertex_str in line.split(" ")]
+        for vertex_idx in range(len(line)-1):
+            forward_opt_tour[line[vertex_idx]] = line[vertex_idx+1]
+            backward_opt_tour[line[vertex_idx+1]] = line[vertex_idx]
 
         self.current_graph_idx += 1
-        return cost_array, y_preds, coords_array, forward_opt_tour, backward_opt_tour
+        return cost_array, coords_array, forward_opt_tour, backward_opt_tour
