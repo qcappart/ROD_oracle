@@ -54,11 +54,12 @@ class DataReader():
         coords_array[:, 1] = data_coords[1::2]
         # Compute the pairwise distances
         cost_array = squareform(pdist(coords_array, 'euclidean'))
-        self.current_graph_idx += 1
 
         # Retrieve the optimal solution
         # Numpy array keeping in the edges used for tours in a matrix
         tour_array = np.zeros((self.num_graphs, self.num_nodes, self.num_nodes))
+        forward_opt_tour = {}
+        backward_opt_tour = {}
 
         for graph_idx in range(len(self.solution_data)):
             line = self.solution_data[graph_idx].replace(" \n", "").replace("\n", "") + " 1"
@@ -66,9 +67,17 @@ class DataReader():
             for vertex_idx in range(len(line)-1):
                 tour_array[graph_idx, line[vertex_idx], line[vertex_idx+1]] = 1
 
+            if self.current_graph_idx==graph_idx:
+                for vertex_idx in range(len(line)-1):
+                    forward_opt_tour[line[vertex_idx]] = line[vertex_idx+1]
+                    backward_opt_tour[line[vertex_idx+1]] = line[vertex_idx]
+                # print(line)
+                # print("for", forward_opt_tour)
+                # print("back", backward_opt_tour)
+
         # Creating the tensor and the variable
         tour_tensor = torch.Tensor(tour_array)
         y_preds = torch.autograd.Variable(tour_tensor)
 
-
-        return cost_array, y_preds, coords_array
+        self.current_graph_idx += 1
+        return cost_array, y_preds, coords_array, forward_opt_tour, backward_opt_tour
