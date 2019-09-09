@@ -4,10 +4,15 @@ from scipy.spatial.distance import pdist, squareform
 class DataReader():
     """Class that reads and treats TSP data
     """
-    def __init__(self, num_nodes, file_path, solution_path):
-        self.num_nodes = num_nodes
+    def __init__(self, file_path, solution_path):
         self.file_path = file_path
         self.file_data = open(file_path, "r").readlines()
+
+        # Retrieve the number of nodes in the graphs
+        first_data_line = self.file_data[0].split(" ")
+        first_line_coords = [float(coord.replace("\n", "")) for coord in first_data_line]
+        self.num_nodes = len(first_line_coords)//2
+
         self.num_graphs = len(self.file_data)
         self.current_graph_idx = 0
         if solution_path is None:
@@ -32,7 +37,7 @@ class DataReader():
         # Retrieve the optimal solution
         forward_opt_tour = {}
         backward_opt_tour = {}
-
+        # Retrieving the line containing the optimal tour of the next graph
         line = self.solution_data[self.current_graph_idx].replace(" \n", "").replace("\n", "") + " 1"
         line = [int(vertex_str)-1 for vertex_str in line.split(" ")]
         for vertex_idx in range(len(line)-1):

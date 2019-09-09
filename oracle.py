@@ -13,19 +13,13 @@ from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 
 from dataset import DataReader
-from config import *
 
 parser = argparse.ArgumentParser(description='gcn_tsp_parser')
-parser.add_argument('--config', type=str, required=True)
-parser.add_argument('--tours_file', type=str, required=True)
+parser.add_argument('--data', type=str, required=True)
+parser.add_argument('--solution', type=str, required=True)
 parser.add_argument('--display', action='store_true')
 
 args = parser.parse_args()
-config_path = args.config
-
-# Load config
-config = get_config(config_path)
-print("Loaded {}:\n{}".format(config_path, config))
 
 def compute_mean_tour_length(num_graphs, bs_nodes, x_edges_values):
     total_length = 0
@@ -37,12 +31,14 @@ def compute_mean_tour_length(num_graphs, bs_nodes, x_edges_values):
                                    bs_nodes[nodes_nb-1]]
     return total_length
 
+
 def create_data(distance_array, inflating_param):
     data = {}
     data['distance_matrix'] = distance_array * inflating_param
     data['num_vehicles'] = 1
     data['depot'] = 0
     return data
+
 
 def ortools_solve(data):
     # Create the routing index manager.
@@ -80,18 +76,19 @@ def ortools_solve(data):
 
 
 def display_current_situation(cost_array, node_coords, visited_vertices, num_nodes, forward_opt_tour, backward_opt_tour):
-    plt.plot(node_coords[:, 0], node_coords[:, 1], "bo")
-    plt.plot(node_coords[visited_vertices, 0], node_coords[visited_vertices, 1], "b-")
     opt_tour_dict = {}
     # Determining if the tour is being followed forwards or backwards
     if (forward_opt_tour[visited_vertices[0]]==visited_vertices[-1]):
+        # Tour followed forwards
         current_vertex = visited_vertices[-1]
         final_vertex = visited_vertices[0]
         opt_tour_dict = forward_opt_tour
     else:
+        # Tour followed backwards
         current_vertex = visited_vertices[0]
         final_vertex = visited_vertices[-1]
         opt_tour_dict = backward_opt_tour
+    # Reconstruct the partial tour
     opt_tour_vertices = [current_vertex]
     begin_opt = True
     while (current_vertex != final_vertex or begin_opt):
@@ -100,19 +97,24 @@ def display_current_situation(cost_array, node_coords, visited_vertices, num_nod
         opt_tour_vertices.append(next_opt_vertex)
         current_vertex = next_opt_vertex
 
+    # Compute the length of the optimal tour including the already constructed partial tour
     current_length = 0
     for idx in range(len(opt_tour_vertices)-1):
         current_length += cost_array[opt_tour_vertices[idx], opt_tour_vertices[idx+1]]
     for idx in range(len(visited_vertices)-1):
         current_length += cost_array[visited_vertices[idx], visited_vertices[idx+1]]
 
+    # Plot the current partial tour
+    plt.plot(node_coords[:, 0], node_coords[:, 1], "bo")
+    plt.plot(node_coords[visited_vertices, 0], node_coords[visited_vertices, 1], "b-")
+    # Plot the optimal halmitonian path closing the min length tour enclosing 
     plt.plot(node_coords[opt_tour_vertices, 0], node_coords[opt_tour_vertices, 1], "r-")
     plt.title("Current optimal distance : " + str(current_length))
     plt.pause(0.5)
     plt.clf()
 
 
-def compute_bs_nodes(cost_array, num_nodes, oracle_precision, coords_array, forward_opt_tour, backward_opt_tour):
+def compute_tour_nodes(cost_array, num_nodes, oracle_precision, coords_array, forward_opt_tour, backward_opt_tour):
     chose_optimal_arc = True
     current_vertex = 0
     visited_vertices_nb = 1
@@ -194,34 +196,28 @@ def compute_bs_nodes(cost_array, num_nodes, oracle_precision, coords_array, forw
         plt.show()
     return np.array(visited_vertices)
 
-num_nodes = config.num_nodes
-filepath = config.test_filepath
-
 ########### Parameters ###########
 # precision_values = np.arange(0.5, 1.001, 0.01)
-precision_values = np.arange(0.6, 0.61, 0.01)
-# precision_values = np.arange(0.94, 1.00001, 0.001)
+# precision_values = np.arange(0.6, 0.61, 0.01)
+precision_values = np.arange(0.94, 1.00001, 0.01)
 ##################################
 
 for oracle_precision in precision_values:
     print("Exploring with precision : " + str(oracle_precision))
-
-    test_dataset = DataReader(num_nodes, filepath, args.tours_file)
+    test_dataset = DataReader(args.data, args.solution)
 
     total_length = 0
     for graph_idx in tqdm(range(test_dataset.num_graphs)):
         cost_array, coords_array, forward_opt_tour, backward_opt_tour = test_dataset.get_next_graph()
-
         # Change diagonal values to prevent staying at the same vertex
-        for node_idx in range(num_nodes):
+        for node_idx in range(test_dataset.num_nodes):
             cost_array[node_idx, node_idx] = 10
 
         # Computing a tour based on the oracle
-        tour_nodes = compute_bs_nodes(cost_array, num_nodes, \
+        tour_nodes = compute_tour_nodes(cost_array, test_dataset.num_nodes, \
                                         oracle_precision, coords_array, \
                                         forward_opt_tour, backward_opt_tour)
         tour_length = compute_mean_tour_length(test_dataset.num_graphs, tour_nodes, cost_array)
         total_length += tour_length
 
-    #print(bs_nodes)
     print("Mean tour length : " + str(total_length/test_dataset.num_graphs))
