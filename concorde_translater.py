@@ -1,8 +1,10 @@
 import os
-
+import subprocess
 import numpy as np
 
 def create_concorde_input(tsp_file_path, cost_array):
+    # Concorde needs a integer array
+    cost_array = cost_array.astype(int)
     num_nodes = cost_array.shape[0]
     with open(tsp_file_path, "w") as tsp_input_f:
         # Writing the header
@@ -21,14 +23,25 @@ def create_concorde_input(tsp_file_path, cost_array):
 
 def call_concorde_solver(instance_path):
     # Composing the command and asking to delete the temporary files
-    command_line = "./concorde/TSP/concorde -x"
+    # command_line = "./concorde/TSP/concorde -x"
+    # solution_path = os.path.splitext(instance_path)[0] + ".sol"
+    # # Puts the output in a file
+    # command_line += " -o " + solution_path
+    # command_line += " " + instance_path
+    # print(command_line)
+    # Calling Concorde
+    # os.system(command_line)
+
+    command_line = ["./concorde/TSP/concorde", "-x"]
     solution_path = os.path.splitext(instance_path)[0] + ".sol"
     # Puts the output in a file
-    command_line += " -o " + solution_path
-    command_line += " " + instance_path
-    print(command_line)
-    # Calling Concorde
-    os.system(command_line)
+    command_line += ["-o", solution_path]
+    command_line += [instance_path]
+    # print(command_line)
+    FNULL = open(os.devnull, 'w')
+    subprocess.call(command_line, stdout=FNULL, stderr=subprocess.STDOUT)
+    # retcode = subprocess.call(command_line)
+
     return solution_path
 
 def retrieve_concorde_output(solution_path):
@@ -41,7 +54,7 @@ def retrieve_concorde_output(solution_path):
             optimal_list += result_line
     # Turn the solution into a numpy array
     optimal_array = np.array(optimal_list, dtype=int)
-    print(optimal_array)
+    return optimal_array
 
 if __name__=="__main__":
     np.random.seed(seed=3)
@@ -54,3 +67,4 @@ if __name__=="__main__":
     create_concorde_input(tsp_file_path, test_array)
     solution_path = call_concorde_solver(tsp_file_path)
     optimal_tour = retrieve_concorde_output(solution_path)
+    print(optimal_tour)
