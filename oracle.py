@@ -12,7 +12,7 @@ from dataset import DataReader
 from concorde_translater import create_concorde_input, call_concorde_solver, retrieve_concorde_output
 
 
-def compute_mean_tour_length(tour_nodes, cost_array):
+def compute_tour_length(tour_nodes, cost_array):
     """Compute a tour length given the cost array
     """
     total_length = 0
@@ -179,7 +179,7 @@ if __name__=="__main__":
     for oracle_precision in precision_values:
         print("Exploring with precision : " + str(oracle_precision))
         dataset = DataReader(args.data)
-        total_length = 0
+        opt_gap_sum = 0
         for graph_idx in tqdm(range(dataset.num_graphs)):
             # Retrieve the graph information
             cost_array, coords_array = dataset.get_next_graph()
@@ -194,13 +194,15 @@ if __name__=="__main__":
             for tour_idx in range(len(tsp_tour)-1):
                 forward_opt_tour[tsp_tour[tour_idx]] = tsp_tour[tour_idx+1]
                 backward_opt_tour[tsp_tour[tour_idx+1]] = tsp_tour[tour_idx]
+            opt_length = compute_tour_length(optimal_tour, cost_array)
 
 
             # Computing a tour based on the oracle
             tour_nodes = compute_tour_nodes(oracle_precision, args, \
                                             cost_array, coords_array, \
                                             forward_opt_tour, backward_opt_tour)
-            tour_length = compute_mean_tour_length(tour_nodes, cost_array)
-            total_length += tour_length
+            tour_length = compute_tour_length(tour_nodes, cost_array)
+            optimality_gap = (tour_length-opt_length)/opt_length
+            opt_gap_sum += optimality_gap
 
-        print("Mean tour length : " + str(total_length/dataset.num_graphs))
+        print("Mean tour length : " + str(opt_gap_sum/dataset.num_graphs))
