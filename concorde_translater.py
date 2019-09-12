@@ -1,5 +1,6 @@
 import os
 import subprocess
+
 import numpy as np
 
 def create_concorde_input(tsp_file_path, cost_array):
@@ -54,7 +55,7 @@ if __name__=="__main__":
     test_array = np.random.randint(3, 10, (test_size, test_size))
     test_array[range(test_size), range(test_size)] = 0
     print(test_array)
-    tsp_file_path = "concorde_instances/temp_instance.tsp"
+    tsp_file_path = "temp_instance.tsp"
 
     create_concorde_input(tsp_file_path, test_array)
     solution_path = call_concorde_solver(tsp_file_path)

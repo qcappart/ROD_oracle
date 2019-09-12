@@ -170,9 +170,8 @@ if __name__=="__main__":
     parser.add_argument('--cost_multiplier', type=int, default=5*1e2, \
                         help='Multiplier for the values of the cost array')
     parser.add_argument('--temp_file_path', type=str, \
-                        default='concorde_instances/temp_instance.tsp', \
+                        default='temp_instance.tsp', \
                         help='Path to the temporary file created to call Concorde')
-
     args = parser.parse_args()
 
     # Prepare the precision values for the oracle
