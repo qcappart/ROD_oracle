@@ -15,7 +15,7 @@ You will also need to install [Concorde](http://www.math.uwaterloo.ca/tsp/concor
 
 ## Function and usage
 
-This code can be used to compute optimality gaps from the oracle algorithm we introduced in our related article. The basic way to call it is :
+This code can be used to compute optimality gaps from the oracle algorithm we introduced. The basic way to call it is :
 ```
 python oracle.py \
 --data example/tspmini50_test_concorde.txt \
@@ -41,8 +41,8 @@ On each graph, the solution is constructed iteratively. The oracle decides at ea
 
 This problem is equivalent to finding the shortest hamiltonian path between the extremities of the partial solution, considering only the nodes that haven't been visited yet. We can see below an example where the hamiltonian path (in red) is recomputed following the non optimal choice by the oracle.  
 
-<img align="center" img src="./other/Figure_2.png" height="200">
-<img align="center" img src="./other/Figure_3.png" height="200">
+<img align="center" img src="./other/tsp_before.png" height="200">
+<img align="center" img src="./other/tsp_after.png" height="200">
 
 This can be reformulated into a Traveling Salesman Problem, by adding a dummy vertex which is at distance 0 of the extremities and infinity from the others. This problem is solved in our code with the help of the Concorde solver.  
 
