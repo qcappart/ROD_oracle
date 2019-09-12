@@ -122,7 +122,8 @@ def compute_tour_nodes(oracle_precision, args, cost_array, coords_array, forward
             solution_path = call_concorde_solver(args.temp_file_path)
             new_tsp_tour = retrieve_concorde_output(solution_path)
             dummy_vertex_idx = new_tsp_array.shape[0]-1
-            new_tsp_tour = np.append(new_tsp_tour[new_tsp_tour!=dummy_vertex_idx], 0)
+            new_tsp_tour = new_tsp_tour[new_tsp_tour!=dummy_vertex_idx]
+            new_tsp_tour = np.append(new_tsp_tour, new_tsp_tour[0])
             
             # Update the optimal solution
             forward_opt_tour = {}
@@ -157,8 +158,6 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Parser for the oracle algorithm')
     parser.add_argument('--data', type=str, required=True, \
                         help='Path to the instance file')
-    parser.add_argument('--solution', type=str, required=True, \
-                        help='Path to the solution file')
     parser.add_argument('--display', action='store_true', \
                         help='Use this flag to see the construction')
     parser.add_argument('--min_prec', type=float, default=0, \
@@ -179,11 +178,24 @@ if __name__=="__main__":
 
     for oracle_precision in precision_values:
         print("Exploring with precision : " + str(oracle_precision))
-        dataset = DataReader(args.data, args.solution)
+        dataset = DataReader(args.data)
         total_length = 0
         for graph_idx in tqdm(range(dataset.num_graphs)):
             # Retrieve the graph information
-            cost_array, coords_array, forward_opt_tour, backward_opt_tour = dataset.get_next_graph()
+            cost_array, coords_array = dataset.get_next_graph()
+
+            # Constructing the optimal solution for this instance
+            create_concorde_input(args.temp_file_path, args.cost_multiplier*cost_array)
+            solution_path = call_concorde_solver(args.temp_file_path)
+            optimal_tour = retrieve_concorde_output(solution_path)
+            tsp_tour = np.append(optimal_tour, optimal_tour[0])
+            forward_opt_tour = {}
+            backward_opt_tour = {}
+            for tour_idx in range(len(tsp_tour)-1):
+                forward_opt_tour[tsp_tour[tour_idx]] = tsp_tour[tour_idx+1]
+                backward_opt_tour[tsp_tour[tour_idx+1]] = tsp_tour[tour_idx]
+
+
             # Computing a tour based on the oracle
             tour_nodes = compute_tour_nodes(oracle_precision, args, \
                                             cost_array, coords_array, \

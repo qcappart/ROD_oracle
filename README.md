@@ -17,7 +17,6 @@ This code can be used to compute optimality gaps from the oracle algorithm we in
 ```
 python oracle.py \
 --data data/tspmini50_test_concorde.txt \
---solution tours/minitours50.txt \
 ```
 This will compute optimality gaps for the oracle with a precision range starting at 0, ending at 1 and increasing of 0.01 at every step.
 
@@ -26,7 +25,6 @@ You can ask for a specific range of values, for instance
 ```
 python oracle.py \
 --data data/tspmini50_test_concorde.txt \
---solution tours/minitours50.txt \
 --min_prec 0.9 \
 --max_prec 0.92 \
 --prec_step 0.05
@@ -52,4 +50,3 @@ Use a gif of the construction ?
 
 Format for the input file
 
-Explain how the optimal tour is recomputed every time
