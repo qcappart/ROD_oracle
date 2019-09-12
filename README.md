@@ -1,8 +1,7 @@
 # ROD_oracle
 Parametrized oracle for computing the ROD (ratio of optimal decisions). Implementation related to "How to Evaluate Machine Learning Approaches for Combinatorial Optimization: Application to the Travelling Salesman Problem"
 
-Use a gif of the construction ?
-
+![demo](other/construction.gif)
 
 ## Requirements
 Python 3.5+  
@@ -41,8 +40,9 @@ On each graph, the solution is constructed iteratively. The oracle decides at ea
 
 This problem is equivalent to finding the shortest hamiltonian path between the extremities of the partial solution, considering only the nodes that haven't been visited yet. We can see below an example where the hamiltonian path (in red) is recomputed following the non optimal choice by the oracle.  
 
-<img align="center" img src="./other/tsp_before.png" height="200">
-<img align="center" img src="./other/tsp_after.png" height="200">
+Before             |  After
+:-------------------------:|:-------------------------:
+![](./other/tsp_before.png)  |  ![](./other/tsp_after.png)
 
 This can be reformulated into a Traveling Salesman Problem, by adding a dummy vertex which is at distance 0 of the extremities and infinity from the others. This problem is solved in our code with the help of the Concorde solver.  
 
