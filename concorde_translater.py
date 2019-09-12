@@ -3,7 +3,8 @@ import subprocess
 import numpy as np
 
 def create_concorde_input(tsp_file_path, cost_array):
-    # Concorde needs a integer array
+    # Concorde needs a integer array, which is why
+    # the values have been multiplied by a constant
     cost_array = cost_array.astype(int)
     num_nodes = cost_array.shape[0]
     with open(tsp_file_path, "w") as tsp_input_f:

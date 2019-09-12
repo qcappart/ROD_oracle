@@ -15,13 +15,9 @@ class DataReader():
 
         self.num_graphs = len(self.file_data)
         self.current_graph_idx = 0
-        if solution_path is None:
-            # Not implemented for now
-            print("Come back later")
-            self.no_solution = True
-        else:
-            self.solution_data = open(solution_path, "r").readlines()
-            self.no_solution = False
+        # Get the optimal solution
+        self.solution_data = open(solution_path, "r").readlines()
+        self.no_solution = False
 
     def get_next_graph(self):
         # Coordinates follow this pattern : [x1, y1, x2, y2, ..., xn, yn]
@@ -37,7 +33,7 @@ class DataReader():
         # Retrieve the optimal solution
         forward_opt_tour = {}
         backward_opt_tour = {}
-        # Retrieving the line containing the optimal tour of the next graph
+        # Retrieve the line containing the optimal tour of the next graph
         line = self.solution_data[self.current_graph_idx].replace(" \n", "").replace("\n", "") + " 1"
         line = [int(vertex_str)-1 for vertex_str in line.split(" ")]
         for vertex_idx in range(len(line)-1):

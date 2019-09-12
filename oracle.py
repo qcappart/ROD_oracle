@@ -12,18 +12,23 @@ from dataset import DataReader
 from concorde_translater import create_concorde_input, call_concorde_solver, retrieve_concorde_output
 
 
-def compute_mean_tour_length(num_graphs, bs_nodes, x_edges_values):
+def compute_mean_tour_length(tour_nodes, cost_array):
+    """Compute a tour length given the cost array
+    """
     total_length = 0
-    nodes_nb, _ = x_edges_values.shape
+    nodes_nb, _ = cost_array.shape
     for node_idx in range(nodes_nb-1):
-        total_length += x_edges_values[bs_nodes[node_idx], \
-                                       bs_nodes[node_idx+1]]
-    total_length += x_edges_values[bs_nodes[0], \
-                                   bs_nodes[nodes_nb-1]]
+        total_length += cost_array[tour_nodes[node_idx], \
+                                    tour_nodes[node_idx+1]]
+    # Closing the tour
+    total_length += cost_array[tour_nodes[0], \
+                                tour_nodes[nodes_nb-1]]
     return total_length
 
 
 def display_current_situation(cost_array, node_coords, visited_vertices, num_nodes, forward_opt_tour):
+    """Display with matplotlib the evolution of the tour construction
+    """
     # Determining if the tour is being followed forwards or backwards
     if (forward_opt_tour[visited_vertices[0]]==visited_vertices[-1]):
         # Tour followed forwards
@@ -59,11 +64,8 @@ def display_current_situation(cost_array, node_coords, visited_vertices, num_nod
     plt.clf()
 
 
-def compute_tour_nodes(cost_array, num_nodes, oracle_precision, coords_array, forward_opt_tour, backward_opt_tour):
-    inflating_param = 2*1e2
-    tsp_file_path = "concorde_instances/temp_instance.tsp"
-    
-    # chose_optimal_arc = True
+def compute_tour_nodes(oracle_precision, args, cost_array, coords_array, forward_opt_tour, backward_opt_tour):
+    num_nodes = cost_array.shape[0]
     current_vertex = 0
     visited_vertices_nb = 1
     visited_vertices = [0]
@@ -79,59 +81,58 @@ def compute_tour_nodes(cost_array, num_nodes, oracle_precision, coords_array, fo
             else :
                 new_vertex = new_vertex_2
         else:
-            # Make a mistake
+            # Make a random guess
             # Compute the probability distribution to choose the new vertex
             vertex_scores = cost_array[current_vertex, :]
-            # Put a dummy value so that python does not complain
+            # Put a dummy value so that python does not complain about the division by zero
+            # This vertex is marked as visited so it will not affect the random choice
             vertex_scores[current_vertex] = 1
             distances = 1.0/vertex_scores
             for visited_idx in visited_vertices:
                 distances[visited_idx] = 0
             distances = distances/distances.sum()
-
             new_vertex = np.random.choice(range(num_nodes), p=distances)
 
         # Add the new vertex to the partial tour and check if it was the optimal one
         visited_vertices.append(new_vertex)
         chose_optimal_arc = (forward_opt_tour[current_vertex]==new_vertex) or (backward_opt_tour[current_vertex]==new_vertex)
 
-        if (not chose_optimal_arc) and (visited_vertices_nb+2<=num_nodes):
-            # Figure out the nodes ordering in order to reconstruct the optimal tour
-            # after the Concorde computation
+        if not chose_optimal_arc:
+            # Figure out the nodes ordering in order to reconstruct the optimal tour after the Concorde computation
             partial_nodes_list = [node_idx for node_idx in nodes_list if node_idx not in visited_vertices[1:-1]]
             invert_partial_list = dict((val, key) for key,val in enumerate(partial_nodes_list))
-            
-            # Construct the cost array to find 
-            # the optimal halmitonian path closing the min length tour
-            tmp_cost_array = np.delete(np.delete(cost_array, visited_vertices[1:-1], axis=0), visited_vertices[1:-1], axis=1)
-            partial_cost_array = np.zeros((tmp_cost_array.shape[0]+1, tmp_cost_array.shape[1]+1))
+            partial_array = np.array(partial_nodes_list)
+
+            # Construct the cost array to find the optimal halmitonian path closing the min length tour
+            restricted_cost_array = np.delete(np.delete(cost_array, visited_vertices[1:-1], axis=0), visited_vertices[1:-1], axis=1)
+            new_tsp_array = np.zeros((restricted_cost_array.shape[0]+1, restricted_cost_array.shape[1]+1))
             # Copy the distances from the original cost array
-            partial_cost_array[:-1, :-1] = tmp_cost_array[:, :]
+            new_tsp_array[:-1, :-1] = restricted_cost_array[:, :]
             # Put upper bound values on the connections to the dummy vertex
-            upper_bound = num_nodes*tmp_cost_array.max()
-            partial_cost_array[-1, 1:] = upper_bound
-            partial_cost_array[1:, -1] = upper_bound
+            upper_bound = num_nodes*restricted_cost_array.max()
+            new_tsp_array[-1, 1:] = upper_bound
+            new_tsp_array[1:, -1] = upper_bound
             # Put distances to zero for the two vertices supposed to be linked to the dummy
-            partial_cost_array[-1, -1] = 0            
-            partial_cost_array[invert_partial_list[visited_vertices[-1]], -1] = 0
-            partial_cost_array[-1, invert_partial_list[visited_vertices[-1]]] = 0
+            new_tsp_array[-1, -1] = 0            
+            new_tsp_array[invert_partial_list[visited_vertices[-1]], -1] = 0
+            new_tsp_array[-1, invert_partial_list[visited_vertices[-1]]] = 0
             
             # Call Concorde for the optimization part
-            create_concorde_input(tsp_file_path, partial_cost_array*inflating_param)
-            solution_path = call_concorde_solver(tsp_file_path)
-            partial_tour = retrieve_concorde_output(solution_path)
-            dummy_vertex_idx = partial_cost_array.shape[0]-1
-            partial_tour = np.append(partial_tour[partial_tour!=dummy_vertex_idx], 0)
-            partial_array = np.array(partial_nodes_list)
+            create_concorde_input(args.temp_file_path, new_tsp_array*args.cost_multiplier)
+            solution_path = call_concorde_solver(args.temp_file_path)
+            new_tsp_tour = retrieve_concorde_output(solution_path)
+            dummy_vertex_idx = new_tsp_array.shape[0]-1
+            new_tsp_tour = np.append(new_tsp_tour[new_tsp_tour!=dummy_vertex_idx], 0)
             
             # Update the optimal solution
             forward_opt_tour = {}
             backward_opt_tour = {}
-            for tour_idx in range(len(partial_tour)-1):
-                forward_opt_tour[partial_array[partial_tour][tour_idx]] = partial_array[partial_tour][tour_idx+1]
-                backward_opt_tour[partial_array[partial_tour][tour_idx+1]] = partial_array[partial_tour][tour_idx]
+            for tour_idx in range(len(new_tsp_tour)-1):
+                forward_opt_tour[partial_array[new_tsp_tour][tour_idx]] = partial_array[new_tsp_tour][tour_idx+1]
+                backward_opt_tour[partial_array[new_tsp_tour][tour_idx+1]] = partial_array[new_tsp_tour][tour_idx]
 
         elif chose_optimal_arc and (current_vertex!=visited_vertices[0]):
+            # Remove the current vertex from the hamiltonian path
             pred_vertex = backward_opt_tour[current_vertex]
             next_vertex = forward_opt_tour[current_vertex] 
             del forward_opt_tour[current_vertex]
@@ -139,10 +140,10 @@ def compute_tour_nodes(cost_array, num_nodes, oracle_precision, coords_array, fo
             forward_opt_tour[pred_vertex] = next_vertex
             backward_opt_tour[next_vertex] = pred_vertex
 
-        # Else case : the first edge has been selected and is optimal
+        # Else case : the current vertex is the start vertex
+        # The first edge has been selected and is optimal
         # There is no need to upgrade forward_opt_tour and backward_opt_tour
 
-        # Making the current vertex unaccessible for the next iterations
         current_vertex = new_vertex
         # Show the current state of the oracle construction
         if args.display:
@@ -150,33 +151,45 @@ def compute_tour_nodes(cost_array, num_nodes, oracle_precision, coords_array, fo
 
     return np.array(visited_vertices)
 
+
 if __name__=="__main__":
     # Get the command information
-    parser = argparse.ArgumentParser(description='gcn_tsp_parser')
-    parser.add_argument('--data', type=str, required=True)
-    parser.add_argument('--solution', type=str, required=True)
-    parser.add_argument('--display', action='store_true')
+    parser = argparse.ArgumentParser(description='Parser for the oracle algorithm')
+    parser.add_argument('--data', type=str, required=True, \
+                        help='Path to the instance file')
+    parser.add_argument('--solution', type=str, required=True, \
+                        help='Path to the solution file')
+    parser.add_argument('--display', action='store_true', \
+                        help='Use this flag to see the construction')
+    parser.add_argument('--min_prec', type=float, default=0, \
+                        help='Min precision for the oracle')
+    parser.add_argument('--max_prec', type=float, default=1, \
+                        help='Max precision for the oracle')
+    parser.add_argument('--prec_step', type=float, default=0.01, \
+                        help='Step precision for the precision increase')
+    parser.add_argument('--cost_multiplier', type=int, default=5*1e2, \
+                        help='Multiplier for the values of the cost array')
+    parser.add_argument('--temp_file_path', type=str, \
+                        default='concorde_instances/temp_instance.tsp', \
+                        help='Path to the temporary file created to call Concorde')
+
     args = parser.parse_args()
 
-    ########### Parameters ###########
-    # precision_values = np.arange(0.5, 1.001, 0.01)
-    precision_values = np.arange(0.6, 0.61, 0.01)
-    # precision_values = np.arange(0.94, 1.00001, 0.01)
-    ##################################
+    # Prepare the precision values for the oracle
+    precision_values = np.arange(args.min_prec, args.max_prec, args.prec_step)
 
     for oracle_precision in precision_values:
         print("Exploring with precision : " + str(oracle_precision))
-        test_dataset = DataReader(args.data, args.solution)
-
+        dataset = DataReader(args.data, args.solution)
         total_length = 0
-        for graph_idx in tqdm(range(test_dataset.num_graphs)):
-            cost_array, coords_array, forward_opt_tour, backward_opt_tour = test_dataset.get_next_graph()
-
+        for graph_idx in tqdm(range(dataset.num_graphs)):
+            # Retrieve the graph information
+            cost_array, coords_array, forward_opt_tour, backward_opt_tour = dataset.get_next_graph()
             # Computing a tour based on the oracle
-            tour_nodes = compute_tour_nodes(cost_array, test_dataset.num_nodes, \
-                                            oracle_precision, coords_array, \
+            tour_nodes = compute_tour_nodes(oracle_precision, args, \
+                                            cost_array, coords_array, \
                                             forward_opt_tour, backward_opt_tour)
-            tour_length = compute_mean_tour_length(test_dataset.num_graphs, tour_nodes, cost_array)
+            tour_length = compute_mean_tour_length(tour_nodes, cost_array)
             total_length += tour_length
 
-        print("Mean tour length : " + str(total_length/test_dataset.num_graphs))
+        print("Mean tour length : " + str(total_length/dataset.num_graphs))
