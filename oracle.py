@@ -205,4 +205,4 @@ if __name__=="__main__":
             optimality_gap = (tour_length-opt_length)/opt_length
             opt_gap_sum += optimality_gap
 
-        print("Mean tour length : " + str(opt_gap_sum/dataset.num_graphs))
+        print("Average optimality gap : " + str(opt_gap_sum/dataset.num_graphs))
