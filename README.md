@@ -12,6 +12,8 @@ Tqdm
 
 You will also need to install [Concorde](http://www.math.uwaterloo.ca/tsp/concorde.html) to use the oracle. To work with the code, the solver code must be downloaded and placed at the project root. After compiling it, the executable for the TSP concorde solver should be found at `./concorde/TSP/concorde` if you are located at the project root.
 
+Note for macOs users: you can install Concorde using [these instructions](https://qmha.wordpress.com/2015/08/20/installing-concorde-on-mac-os-x/).
+
 ## Function and usage
 
 This code can be used to compute optimality gaps from the oracle algorithm we introduced. The basic way to call it is :
