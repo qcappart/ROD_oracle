@@ -19,7 +19,7 @@ Note for macOs users: you can install Concorde using [these instructions](https:
 This code can be used to compute optimality gaps from the oracle algorithm we introduced. The basic way to call it is :
 ```
 python oracle.py \
---data example/tspmini50_test_concorde.txt \
+--data example/tsp50_100graphs.txt \
 ```
 This will compute optimality gaps for the oracle with a precision range starting at 0, ending at 1 and increasing of 0.01 at every step.
 
@@ -27,7 +27,7 @@ You can ask for a specific range of values, for instance
 
 ```
 python oracle.py \
---data example/tspmini50_test_concorde.txt \
+--data example/tsp50_100graphs.txt \
 --min_prec 0.9 \
 --max_prec 0.92 \
 --prec_step 0.05
